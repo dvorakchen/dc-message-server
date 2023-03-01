@@ -70,6 +70,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "dv_message_server"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "clap",
+ "dvorak_message",
+ "once_cell",
+ "tokio",
+]
+
+[[package]]
 name = "dvorak_message"
 version = "0.1.0"
 source = "git+https://github.com/ChenDvorak/dvorak-message#9acca74e89e59cdb571a0d4961b6d088e843eead"
@@ -263,17 +274,6 @@ dependencies = [
  "libc",
  "linux-raw-sys",
  "windows-sys 0.45.0",
-]
-
-[[package]]
-name = "server"
-version = "0.1.0"
-dependencies = [
- "bytes",
- "clap",
- "dvorak_message",
- "once_cell",
- "tokio",
 ]
 
 [[package]]

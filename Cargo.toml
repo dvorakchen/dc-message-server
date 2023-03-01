@@ -1,6 +1,6 @@
 [package]
-name = "server"
-description = ""
+name = "dv_message_server"
+description = "a server of Dvorak Message for communication"
 version = "0.1.0"
 edition = "2021"
 
