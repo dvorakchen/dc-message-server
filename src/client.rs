@@ -1,8 +1,9 @@
-use tokio::net::TcpStream;
+use super::global;
 use dvorak_message::message::{Message, MessageType};
+use tokio::net::TcpStream;
 
 /// check the next message type is [`MessageType::Login`]
-/// 
+///
 /// returns username that [`MessageType::Login`], otherwise Err(())
 pub(crate) async fn check_login(tcp_stream: &mut TcpStream) -> Result<String, ()> {
     let message = Message::read_from(tcp_stream).await.unwrap();
