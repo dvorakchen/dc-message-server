@@ -45,19 +45,21 @@ impl Server {
 
     async fn listen_client(username: String, store: ClientStore) -> Result<(), ()> {
         loop {
-            let mut hm = store.write().await;
+            let message = {
+                let mut hm = store.write().await;
+                let stream = hm.get_mut(&username).ok_or_else(|| ())?;
 
-            let stream = hm.get_mut(&username).ok_or_else(|| ())?;
-
-            let message = Message::read_from(stream)
-                .await
-                .map_err(|_| ())?
-                .ok_or_else(|| ())?;
+                Message::read_from(stream)
+                    .await
+                    .map_err(|_| ())?
+                    .ok_or_else(|| ())?
+            };
 
             match &message.message_type {
                 MessageType::Text(_) => {
                     let receiver = &message.receiver.clone();
 
+                    let mut hm = store.write().await;
                     let receiver_stream = hm.get_mut(receiver);
                     if receiver_stream.is_none() {
                         println!("{} offline!", receiver);
@@ -69,20 +71,20 @@ impl Server {
 
                         let stream = hm.get_mut(&username).ok_or_else(|| ())?;
                         Message::send(stream, offline_message).await.unwrap();
-                        break;
+                        continue;
                     }
 
                     let receiver_stream = receiver_stream.unwrap();
                     Message::send(receiver_stream, message).await.unwrap();
                 }
                 MessageType::Logout => {
+                    let mut hm = store.write().await;
+                    hm.remove(&username);
                     println!("{} logged out!", username);
                     break;
                 }
                 _ => continue,
             }
-
-            hm.remove(&username);
         }
         Ok(())
     }
@@ -96,7 +98,7 @@ impl Server {
         if message.message_type != MessageType::Login {
             return Err(());
         }
-    
+
         Ok(message.username)
     }
 }
