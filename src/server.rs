@@ -7,6 +7,17 @@ use dvorak_message::message::{Message, MessageType};
 
 type ClientStore = Arc<RwLock<HashMap<String, TcpStream>>>;
 
+pub async fn get_mut_ref<'a>(
+    store: &'a ClientStore,
+    username: &String,
+) -> Option<&'a mut TcpStream> {
+    store
+        .write()
+        .await
+        .get_mut(username)
+        .map(|t| unsafe { &mut *(t as *mut TcpStream) })
+}
+
 pub(crate) struct Server {
     keeping_clients: ClientStore,
     listener: TcpListener,
@@ -27,10 +38,21 @@ impl Server {
 
             let first = Server::check_login(&mut client_stream).await;
             if first.is_err() {
+                Message::send(
+                    &mut client_stream,
+                    Message::new(
+                        MessageType::Text("need login".to_string()),
+                        "<Server>".to_string(),
+                        String::new(),
+                    ),
+                )
+                .await
+                .unwrap();
                 continue;
             }
 
             let username = first.unwrap();
+            println!("{username} connecting");
             self.keeping_clients
                 .write()
                 .await
@@ -38,29 +60,31 @@ impl Server {
             let store = Arc::clone(&self.keeping_clients);
 
             tokio::spawn(async move {
-                _ = Server::listen_client(username, store);
+                let result = Server::listen_client(username, store).await;
+                if let Err(e) = result {
+                    println!("{e}");
+                }
             });
         }
     }
 
-    async fn listen_client(username: String, store: ClientStore) -> Result<(), ()> {
+    async fn listen_client(username: String, store: ClientStore) -> Result<(), &'static str> {
         loop {
-            let message = {
-                let mut hm = store.write().await;
-                let stream = hm.get_mut(&username).ok_or_else(|| ())?;
+            let client_stream = get_mut_ref(&store, &username)
+                .await
+                .ok_or_else(|| "cannot find TcpStream")?;
 
-                Message::read_from(stream)
-                    .await
-                    .map_err(|_| ())?
-                    .ok_or_else(|| ())?
-            };
+            let message = Message::read_from(client_stream)
+                .await
+                .map_err(|_| "read from client failed")?
+                .ok_or_else(|| "read from client failed")?;
 
             match &message.message_type {
                 MessageType::Text(_) => {
+                    println!("Received type: Text");
                     let receiver = &message.receiver.clone();
 
-                    let mut hm = store.write().await;
-                    let receiver_stream = hm.get_mut(receiver);
+                    let receiver_stream = get_mut_ref(&store, &receiver).await;
                     if receiver_stream.is_none() {
                         println!("{} offline!", receiver);
                         let offline_message = Message::new(
@@ -69,8 +93,7 @@ impl Server {
                             username.clone(),
                         );
 
-                        let stream = hm.get_mut(&username).ok_or_else(|| ())?;
-                        Message::send(stream, offline_message).await.unwrap();
+                        Message::send(client_stream, offline_message).await.unwrap();
                         continue;
                     }
 
@@ -78,12 +101,16 @@ impl Server {
                     Message::send(receiver_stream, message).await.unwrap();
                 }
                 MessageType::Logout => {
+                    println!("Received type: Logout");
                     let mut hm = store.write().await;
                     hm.remove(&username);
                     println!("{} logged out!", username);
                     break;
                 }
-                _ => continue,
+                _ => {
+                    println!("Received type: other");
+                    continue
+                },
             }
         }
         Ok(())
